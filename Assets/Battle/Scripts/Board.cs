@@ -18,7 +18,10 @@ namespace battle
         private Tile empty;
         [SerializeField]
         private Tile rough;
+        [SerializeField]
+        private UnitManager um;
 
+        private UnitManager unitManager;
         private Tile[,] board; //A list of all tiles on the board ordered by row and column
         private LinkedList<Tile> softShaded; //A list of softly shaded tiles
         private LinkedList<Tile> hardShaded; //A list of hard shaded tiles
@@ -28,6 +31,8 @@ namespace battle
             CreateBoard(r, c, tl);
             softShaded = new LinkedList<Tile>();
             hardShaded = new LinkedList<Tile>();
+            unitManager = (UnitManager)GameObject.Instantiate(um);
+            unitManager.Initialize(this);
         }
 
         // Update is called once per frame
@@ -36,6 +41,13 @@ namespace battle
 
         public Tile getTile(int row, int col) {
             return board[row, col];
+        }
+
+        public int getHeight() {
+            return board.GetLength(0);
+        }
+        public int getWidth() {
+            return board.GetLength(1);
         }
 
         // Creates a board of hexagons with 'rows', 'cols' columns, and tiles 'tileLength' apart
@@ -108,6 +120,8 @@ namespace battle
             getLL(soft).AddFirst(start);
             LLQueue tileQueue = new LLQueue();
             foreach (Tile t in start.getAllowedAdj(distance, soft)) {
+                if (t.unitContained != null)
+                    continue;
                 if (soft)
                     t.setSoftDist(t.getCost());
                 else
@@ -121,6 +135,8 @@ namespace battle
                 foreach (Tile t in next.getAllowedAdj(distance, soft)) {
                     if (getLL(soft).Contains(t))
                         continue;
+                    if (t.unitContained != null)
+                        continue;
                     if (t.getDist(soft) != 0 && t.getDist(soft) <= next.getDist(soft) + t.getCost())
                         continue;
                     if (t.getDist(soft) > 0)
@@ -132,6 +148,11 @@ namespace battle
                     tileQueue.insert(t, soft);
                 }
             }
+        }
+
+        public void move(Tile[] path) {
+            removeShade(false);
+            unitManager.move(path);
         }
 
         private LinkedList<Tile> getLL(bool soft) {
@@ -186,26 +207,6 @@ namespace battle
                     head = current.next;
                 else
                     prev.next = current.next;
-            }
-
-            public List<Tile> toList() {
-                List<Tile> toReturn = new List<Tile>();
-                TileNode current = head;
-                while (current != null) {
-                    toReturn.Add(current.item);
-                    current = current.next;
-                }
-                return toReturn;
-            }
-
-            public override string ToString() {
-                String toReturn = "[";
-                TileNode current = head;
-                while (current != null) {
-                    toReturn += current.item + " ";
-                    current = current.next;
-                }
-                return toReturn.TrimEnd() + "]";
             }
         }
 

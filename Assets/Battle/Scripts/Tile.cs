@@ -8,11 +8,11 @@ namespace battle
     public class Tile : MonoBehaviour
     {
 
-        public GameObject unitContained;
+        public Unit unitContained;
 
         [SerializeField]
         private int cost;
-        private Board holder;
+        private Board board;
         private bool selectable;
         private SpriteRenderer spriteRenderer;
         private Color originalColor;
@@ -43,9 +43,9 @@ namespace battle
         }
 
         // Creates a tile which can have up to 'adjacentCount' tiles adjacent
-        public void Initialize(Board holder, int adjacentCount) {
+        public void Initialize(Board board, int adjacentCount) {
             this.adjacentTiles = new Tile[adjacentCount];
-            this.holder = holder;
+            this.board = board;
             currentLength = 0;
         }
 
@@ -167,9 +167,8 @@ namespace battle
 
         void OnMouseOver() {
             if (Input.GetMouseButtonDown(0))
-                holder.shade(this, 5, true);
-            if (Input.GetMouseButtonDown(1))
-                holder.shade(this, 5, false);
+                if (hardPath.Count > 0)
+                    board.move(hardPath.ToArray());
         }
 
         private int hardDist() {
