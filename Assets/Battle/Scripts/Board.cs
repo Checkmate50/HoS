@@ -105,7 +105,10 @@ public class Board : MonoBehaviour {
         getLL(soft).AddFirst(start);
         LLQueue tileQueue = new LLQueue();
         foreach (Tile t in start.getAllowedAdj(distance, soft)) {
-            t.setDist(t.getCost(), soft);
+            if (soft)
+                t.setSoftDist(t.getCost());
+            else
+                t.setPath(new List<Tile>());
             tileQueue.insert(t, soft);
         }
         while (!tileQueue.empty()) {
@@ -115,11 +118,14 @@ public class Board : MonoBehaviour {
             foreach(Tile t in next.getAllowedAdj(distance, soft)) {
                 if (getLL(soft).Contains(t))
                     continue;
-                if (t.getDist(soft) != 0 && t.getDist(soft) < next.getDist(soft) + t.getCost())
+                if (t.getDist(soft) != 0 && t.getDist(soft) <= next.getDist(soft) + t.getCost())
                     continue;
                 if (t.getDist(soft) > 0)
                     tileQueue.remove(t);
-                t.setDist(next.getDist(soft) + t.getCost(), soft);
+                if (soft)
+                    t.setSoftDist(next.getDist(soft) + t.getCost());
+                if (!soft)
+                    t.setPath(next.getPath());
                 tileQueue.insert(t, soft);
             }
         }
@@ -177,6 +183,16 @@ public class Board : MonoBehaviour {
                 head = current.next;
             else
                 prev.next = current.next;
+        }
+
+        public List<Tile> toList() {
+            List<Tile> toReturn = new List<Tile>();
+            TileNode current = head;
+            while (current != null) {
+                toReturn.Add(current.item);
+                current = current.next;
+            }
+            return toReturn;
         }
 
         public override string ToString() {

@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System;
+using System.Collections.Generic;
 
 public class Tile : MonoBehaviour {
 
@@ -12,8 +13,8 @@ public class Tile : MonoBehaviour {
     private bool selectable;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
-    private int hardDist;
     private int softDist;
+    private List<Tile> hardPath;
 
     //A list of tiles adjacent to this tile
     //Sorted on creation
@@ -26,6 +27,7 @@ public class Tile : MonoBehaviour {
         selectable = false;
         spriteRenderer = this.GetComponent<SpriteRenderer>();
         originalColor = spriteRenderer.color;
+        hardPath = new List<Tile>();
 	}
 	
 	// Update is called once per frame
@@ -92,8 +94,10 @@ public class Tile : MonoBehaviour {
 
     //Removes shade and set dist for either soft or hard
     public void removeShade(bool soft) {
-        if (!soft)
+        if (!soft) {
             selectable = false;
+            hardPath.Clear();
+        }
         resetDist(soft);
         spriteRenderer.color = originalColor;
         if (selectable)
@@ -118,31 +122,58 @@ public class Tile : MonoBehaviour {
         return toReturn;
     }
 
+    public List<Tile> getPath() {
+        return this.hardPath;
+    }
+
+    public void setPath(List<Tile> path) {
+        hardPath.Clear();
+        foreach (Tile item in path)
+            hardPath.Add(item);
+        hardPath.Add(this);
+    }
+
     //Resets distances on this tile
     //If soft, doesn't reset hard distances
     public void resetDist(bool soft) {
         if (!soft)
-            hardDist = 0;
+            hardPath.Clear();
         softDist = 0;
     }
 
     //Sets the distance appropriately
-    public void setDist(int value, bool soft) {
-        if (soft)
-            softDist = value;
-        else
-            hardDist = value;
+    public void setSoftDist(int value) {
+        softDist = value;
     }
 
     //Gets the appropriate distance
     public int getDist(bool soft) {
-        return soft ? softDist : hardDist;
+        return soft ? softDist : hardDist();
+    }
+
+    void OnMouseEnter() {
+        if (hardPath.Count > 0)
+            foreach (Tile t in hardPath)
+                t.shade(true);
+    }
+
+    void OnMouseExit() {
+        if (hardPath.Count > 0)
+            foreach (Tile t in hardPath)
+                t.removeShade(true);
     }
 
     void OnMouseOver() {
         if (Input.GetMouseButtonDown(0))
-            holder.shade(this, 3, true);
+            holder.shade(this, 5, true);
         if (Input.GetMouseButtonDown(1))
-            holder.shade(this, 3, false);
+            holder.shade(this, 5, false);
+    }
+
+    private int hardDist() {
+        int sum = 0;
+        foreach (Tile t in hardPath)
+            sum += t.getCost();
+        return sum;
     }
 }
