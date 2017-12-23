@@ -1,181 +1,198 @@
 ﻿using UnityEngine;
-using System.Collections;
 using System;
 using System.Collections.Generic;
 
 namespace battle
 {
-    public class Tile : MonoBehaviour
-    {
+  public class Tile : MonoBehaviour, IBoardElement
+  {
+    protected List<Unit> unitsContained;
+    protected List<int> teamsContained;
 
-        public Unit unitContained;
+    [SerializeField]
+    protected int moveCost;
+    [SerializeField]
+    protected int damage;
 
-        [SerializeField]
-        private int cost;
-        private Board board;
-        private bool selectable;
-        private SpriteRenderer spriteRenderer;
-        private Color originalColor;
-        private int softDist;
-        private List<Tile> hardPath;
+    protected SpriteRenderer spriteRenderer;
+    protected Color originalColor;
+    protected int softDist;
+    protected Tile attackPosition;
+    protected List<float> appliedShades;
 
-        //A list of tiles adjacent to this tile
-        //Sorted on creation
-        private Tile[] adjacentTiles;
-        private int currentLength;
+    protected int pathCost;
 
-        // Use this for initialization
-        void Start() {
-            unitContained = null;
-            selectable = false;
-            spriteRenderer = this.GetComponent<SpriteRenderer>();
-            originalColor = spriteRenderer.color;
-            hardPath = new List<Tile>();
-        }
+    public Board board { get; private set; }
 
-        // Update is called once per frame
-        void Update() {
-
-        }
-
-        public override String ToString() {
-            return "(" + this.transform.position.x + ", " + this.transform.position.y + ")";
-        }
-
-        // Creates a tile which can have up to 'adjacentCount' tiles adjacent
-        public void Initialize(Board board, int adjacentCount) {
-            this.adjacentTiles = new Tile[adjacentCount];
-            this.board = board;
-            currentLength = 0;
-        }
-
-        //Adds the given tile to the list of adjacent tiles in sorted order
-        //Also adds this tile to the given tile by the same call
-        public void addAdjacent(Tile t) {
-            addAdjacent(t, true);
-        }
-
-        //Adds the given tile to the list of adjacent tiles in sorted order
-        //Can decide whether to add this tile to the given tile
-        public void addAdjacent(Tile t, bool addEquivalent) {
-            currentLength++;
-            if (currentLength > adjacentTiles.Length)
-                throw new IndexOutOfRangeException("Attempting to add " + currentLength + " adjacent tiles to the tile " + this.ToString()
-                    + "which can only hold " + adjacentTiles.Length + " tiles");
-
-            for (int i = 0; i < currentLength - 1; i++) {
-                if (adjacentTiles[i].getCost() > t.getCost()) {
-                    //Insert t into list
-                    for (int j = currentLength - 1; j > i; j--)
-                        adjacentTiles[j] = adjacentTiles[j - 1];
-                    adjacentTiles[i] = t;
-                    if (addEquivalent)
-                        t.addAdjacent(this, false);
-                    return;
-                }
-            }
-
-            adjacentTiles[currentLength - 1] = t;
-            if (addEquivalent)
-                t.addAdjacent(this, false);
-        }
-
-        public int getCost() {
-            return this.cost;
-        }
-
-        public void shade(bool soft) {
-            if (!soft)
-                selectable = true;
-            Color temp = spriteRenderer.color;
-            if (soft)
-                spriteRenderer.color = new Color(temp.r * .75f, temp.g * .75f, temp.b * .75f);
-            else
-                spriteRenderer.color = new Color(temp.r * .5f, temp.g * .5f, temp.b * .5f);
-        }
-
-        //Removes shade and set dist for either soft or hard
-        public void removeShade(bool soft) {
-            if (!soft) {
-                selectable = false;
-                hardPath.Clear();
-            }
-            resetDist(soft);
-            spriteRenderer.color = originalColor;
-            if (selectable)
-                this.shade(false);
-        }
-
-        //Returns the list of adjacent tiles.  Note that this list is sorted
-        public Tile[] getAdjacent() {
-            return adjacentTiles;
-        }
-
-        public Tile[] getAllowedAdj(int distance, bool soft) {
-            int index = 0;
-            for (; index < adjacentTiles.Length; index++)
-                if (this.getDist(soft) + adjacentTiles[index].getCost() > distance)
-                    break;
-            index -= 1;
-            Tile[] toReturn = new Tile[index + 1];
-            for (int i = 0; i <= index; i++) {
-                toReturn[i] = adjacentTiles[i];
-            }
-            return toReturn;
-        }
-
-        public List<Tile> getPath() {
-            return this.hardPath;
-        }
-
-        public void setPath(List<Tile> path) {
-            hardPath.Clear();
-            foreach (Tile item in path)
-                hardPath.Add(item);
-            hardPath.Add(this);
-        }
-
-        //Resets distances on this tile
-        //If soft, doesn't reset hard distances
-        public void resetDist(bool soft) {
-            if (!soft)
-                hardPath.Clear();
-            softDist = 0;
-        }
-
-        //Sets the distance appropriately
-        public void setSoftDist(int value) {
-            softDist = value;
-        }
-
-        //Gets the appropriate distance
-        public int getDist(bool soft) {
-            return soft ? softDist : hardDist();
-        }
-
-        void OnMouseEnter() {
-            if (hardPath.Count > 0)
-                foreach (Tile t in hardPath)
-                    t.shade(true);
-        }
-
-        void OnMouseExit() {
-            if (hardPath.Count > 0)
-                foreach (Tile t in hardPath)
-                    t.removeShade(true);
-        }
-
-        void OnMouseOver() {
-            if (Input.GetMouseButtonDown(0))
-                if (hardPath.Count > 0)
-                    board.move(hardPath.ToArray());
-        }
-
-        private int hardDist() {
-            int sum = 0;
-            foreach (Tile t in hardPath)
-                sum += t.getCost();
-            return sum;
-        }
+    public int Cost {
+      get {
+        return moveCost < 0 ? 0 : moveCost;
+      }
     }
+
+    public int Damage {
+      get {
+        return damage;
+      }
+    }
+
+    private ICollection<Tile> movePath;
+    public ICollection<Tile> MovePath {
+      get {
+        return movePath;
+      }
+      set {
+        if (movePath.Count < 2)
+          return;
+        pathCost = Board.ComputeCost(movePath);
+      }
+    }
+
+    public int PathCost { get; protected set; }
+    public int Row { get; private set; }
+    public int Column { get; private set; }
+
+    //A list of tiles adjacent to this tile
+    private List<Tile> adjacentTiles;
+    private Dictionary<Tile, Edge> edges;
+
+    public Tile() {
+      unitsContained = new List<Unit>();
+      teamsContained = new List<int>();
+      adjacentTiles = new List<Tile>();
+      edges = new Dictionary<Tile, Edge>();
+      movePath = new List<Tile>();
+    }
+
+    // Use this for initialization
+    void Start() {
+      spriteRenderer = GetComponent<SpriteRenderer>();
+      originalColor = spriteRenderer.color;
+    }
+
+    // Update is called once per frame
+    void Update() {
+
+    }
+
+    public override string ToString() {
+      return "(" + transform.position.x + ", " + transform.position.y + ")";
+    }
+
+    // Creates a tile which can have up to 'adjacentCount' tiles adjacent
+    public void Initialize(Board board, int row, int col) {
+      this.board = board;
+      Row = row;
+      Column = col;
+    }
+
+    public void Clicked(int button) {
+      switch (button) {
+        case 0:
+          TileBehavior.LeftClicked(this);
+          break;
+        case 1:
+          TileBehavior.RightClicked(this);
+          break;
+      }
+    }
+
+    public Edge GetEdge(Tile t) {
+      if (!edges.ContainsKey(t))
+        throw new ArgumentException("No edge between this tile and target");
+      return edges[t];
+    }
+
+    public void AddEdge(Tile toAdd, Edge edge) {
+      AddEdge(toAdd, edge, 0, true);
+    }
+    public void AddEdge(Tile toAdd, Edge edge, int cost) {
+      AddEdge(toAdd, edge, cost, true);
+    }
+    public void AddEdge(Tile toAdd, Edge edge, int cost, bool willDuplicate) {
+      adjacentTiles.Add(toAdd);
+      edges[toAdd] = edge;
+      if (willDuplicate) {
+        edge.Initialize(new Tuple<Tile, Tile>(this, toAdd), cost);
+        toAdd.AddEdge(this, edge, cost, false);
+      }
+    }
+
+    //Replaces the given tile to the list of adjacent tiles
+    public void SetAdjacent(Tile toRemove, Tile toAdd) {
+      for (int i = 0; i < adjacentTiles.Count; i++)
+        if (adjacentTiles[i] == toRemove)
+          adjacentTiles[i] = toAdd;
+    }
+
+    //Replace this tile in each adjacent tile
+    public void ReplaceTile(Tile replacement) {
+      foreach (Tile t in adjacentTiles)
+        t.SetAdjacent(this, replacement);
+    }
+
+    //Shades this tile by a given factor
+    public void Shade(float factor) {
+      Shade(factor, true);
+    }
+
+    private void Shade(float factor, bool addShade) {
+      Color color = spriteRenderer.color;
+      spriteRenderer.color = new Color(color.r * factor, color.g * factor, color.b * factor);
+      appliedShades.Add(factor);
+    }
+
+    public void RemoveShade(float shade) {
+      spriteRenderer.color = originalColor;
+      appliedShades.Remove(shade);
+      foreach (float s in appliedShades)
+        Shade(shade, false);
+    }
+
+    //Removes shade
+    public void ResetShade() {
+      spriteRenderer.color = originalColor;
+      appliedShades = new List<float>();
+    }
+
+    //Returns the list of adjacent tiles
+    public ICollection<Tile> GetAdjacent() {
+      return adjacentTiles;
+    }
+    
+    public void ClearPath() {
+      MovePath.Clear();
+      PathCost = int.MaxValue; //Unexplored
+    }
+
+    public void SetPath(ICollection<Tile> path) {
+      MovePath.Clear();
+      foreach (Tile item in path)
+        MovePath.Add(item);
+      MovePath.Add(this);
+    }
+
+    public void Search(int flag) {
+      switch (flag) {
+        case 1:
+          TileBehavior.SearchSelected(this);
+          break;
+        default:
+          TileBehavior.Search(this);
+          break;
+      }  
+    }
+
+    protected void OnMouseEnter() {
+      board.SetTileHovered(this);
+    }
+
+    protected void OnMouseExit() {
+      board.RemoveTileHovered(this);
+    }
+
+    protected void Select() {
+      board.AddSelected(this);
+    }
+  }
 }
