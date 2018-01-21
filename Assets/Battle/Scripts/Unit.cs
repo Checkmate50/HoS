@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace battle
+namespace Board
 {
   public class Unit : MonoBehaviour
   {

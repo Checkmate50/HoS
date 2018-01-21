@@ -2,17 +2,20 @@
 using System;
 using System.Collections.Generic;
 
-namespace battle
+namespace Board
 {
-  public class Tile : MonoBehaviour, IBoardElement
+  public class BoardNode : MonoBehaviour, IBoardElement
   {
     protected List<Unit> unitsContained;
     protected List<int> teamsContained;
+    
 
     [SerializeField]
-    protected int moveCost;
+    protected int cost;
     [SerializeField]
     protected int damage;
+    [SerializeField]
+    protected int opacity;
 
     protected SpriteRenderer spriteRenderer;
     protected Color originalColor;
@@ -24,17 +27,9 @@ namespace battle
 
     public Board board { get; private set; }
 
-    public int Cost {
-      get {
-        return moveCost < 0 ? 0 : moveCost;
-      }
-    }
-
-    public int Damage {
-      get {
-        return damage;
-      }
-    }
+    public int Cost { get { return cost < 0 ? 0 : cost; } }
+    public int Damage { get { return damage; } }
+    public int Opacity { get { return opacity; } }
 
     private ICollection<Tile> movePath;
     public ICollection<Tile> MovePath {
@@ -55,8 +50,9 @@ namespace battle
     //A list of tiles adjacent to this tile
     private List<Tile> adjacentTiles;
     private Dictionary<Tile, Edge> edges;
+    private Dictionary<LineSegment, Edge> geometricMap;
 
-    public Tile() {
+    public BoardNode() {
       unitsContained = new List<Unit>();
       teamsContained = new List<int>();
       adjacentTiles = new List<Tile>();
@@ -68,6 +64,7 @@ namespace battle
     void Start() {
       spriteRenderer = GetComponent<SpriteRenderer>();
       originalColor = spriteRenderer.color;
+      appliedShades = new List<float>();
     }
 
     // Update is called once per frame
@@ -76,7 +73,7 @@ namespace battle
     }
 
     public override string ToString() {
-      return "(" + transform.position.x + ", " + transform.position.y + ")";
+      return "(" + Row + ", " + Column + ")";
     }
 
     // Creates a tile which can have up to 'adjacentCount' tiles adjacent
@@ -97,24 +94,42 @@ namespace battle
       }
     }
 
+    public List<Edge> GetEdges() {
+      List<Edge> toReturn = new List<Edge>();
+      foreach (Tile t in adjacentTiles)
+        toReturn.Add(edges[t]);
+      return toReturn;
+    }
+
     public Edge GetEdge(Tile t) {
       if (!edges.ContainsKey(t))
         throw new ArgumentException("No edge between this tile and target");
       return edges[t];
     }
 
+    // Add an edge and associated tile
+    // An optional line segment allows specification on the direction of the new tile
+    // If this is not provided, the edge will be assumed to be in the geometric direction of the new tile
     public void AddEdge(Tile toAdd, Edge edge) {
-      AddEdge(toAdd, edge, 0, true);
+      LineSegment checkLine = new LineSegment(Shape.Center, toAdd.Shape.Center);
+      foreach (LineSegment ls in Shape.LineSegments)
+        if (ls.Intersection(checkLine) != null) {
+          AddEdge(toAdd, edge, ls);
+          return;
+        }
+      AddEdge(toAdd, edge, null);
     }
-    public void AddEdge(Tile toAdd, Edge edge, int cost) {
-      AddEdge(toAdd, edge, cost, true);
+    public void AddEdge(Tile toAdd, Edge edge, LineSegment line) {
+      AddEdge(toAdd, edge, line, true);
     }
-    public void AddEdge(Tile toAdd, Edge edge, int cost, bool willDuplicate) {
+    private void AddEdge(Tile toAdd, Edge edge, LineSegment line, bool willDuplicate) {
+      if (TileBehavior.VERBOSE)
+        Debug.Log("Warning: tiles " + ToString() + " and " + toAdd.ToString() + " were not given a geometric edge");
       adjacentTiles.Add(toAdd);
       edges[toAdd] = edge;
       if (willDuplicate) {
-        edge.Initialize(new Tuple<Tile, Tile>(this, toAdd), cost);
-        toAdd.AddEdge(this, edge, cost, false);
+        edge.Initialize(new Tuple<Tile, Tile>(this, toAdd), line);
+        toAdd.AddEdge(this, edge, line, false);
       }
     }
 
@@ -131,7 +146,7 @@ namespace battle
         t.SetAdjacent(this, replacement);
     }
 
-    //Shades this tile by a given factor
+    //Shades this tile to a given factor
     public void Shade(float factor) {
       Shade(factor, true);
     }
@@ -142,6 +157,13 @@ namespace battle
       appliedShades.Add(factor);
     }
 
+    // Removes all shade
+    public void RemoveShade() {
+      spriteRenderer.color = originalColor;
+      appliedShades = new List<float>();
+    }
+
+    // Removes a specific shade (if it has applied this shade)
     public void RemoveShade(float shade) {
       spriteRenderer.color = originalColor;
       appliedShades.Remove(shade);
@@ -149,13 +171,7 @@ namespace battle
         Shade(shade, false);
     }
 
-    //Removes shade
-    public void ResetShade() {
-      spriteRenderer.color = originalColor;
-      appliedShades = new List<float>();
-    }
-
-    //Returns the list of adjacent tiles
+    // Returns the list of adjacent tiles
     public ICollection<Tile> GetAdjacent() {
       return adjacentTiles;
     }
@@ -172,17 +188,6 @@ namespace battle
       MovePath.Add(this);
     }
 
-    public void Search(int flag) {
-      switch (flag) {
-        case 1:
-          TileBehavior.SearchSelected(this);
-          break;
-        default:
-          TileBehavior.Search(this);
-          break;
-      }  
-    }
-
     protected void OnMouseEnter() {
       board.SetTileHovered(this);
     }
@@ -191,8 +196,28 @@ namespace battle
       board.RemoveTileHovered(this);
     }
 
-    protected void Select() {
-      board.AddSelected(this);
+    public void Deselect() {
+      Deselect(0);
+    }
+
+    public void Deselect(int flag) {
+      TileBehavior.Deselected(this, flag);
+    }
+
+    public void ClearSelected() {
+      ClearSelected(0);
+    }
+
+    public void ClearSelected(int flag) {
+      TileBehavior.ClearSelected(this, flag);
+    }
+
+    public void Select() {
+      Select(0);
+    }
+
+    public void Select(int flag) {
+      TileBehavior.Selected(this, flag);
     }
   }
 }

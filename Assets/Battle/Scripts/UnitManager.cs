@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 
-namespace battle
+namespace Board
 {
   public class UnitManager : MonoBehaviour
   {
