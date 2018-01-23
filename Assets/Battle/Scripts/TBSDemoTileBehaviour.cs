@@ -4,9 +4,13 @@ using UnityEngine;
 
 namespace Board
 {
-  public class TBSDemoTileBehavior : TileBehavior
+  public class TBSDemoTileBehaviour : TiledBoardBehaviour
   {
-    public void Clicked(Tile tile, int button) {
+    public TBSDemoTileBehaviour() {
+      Verbose = true;
+    }
+
+    public override void Clicked(Tile tile, int button) {
       switch (button) {
         case 0:
           LeftClicked(tile);
@@ -19,11 +23,15 @@ namespace Board
 
     // Behavior when the tile is left-clicked
     public void LeftClicked(Tile tile) {
-      tile.board.Deselect(0);
-      tile.board.AddSelected(tile);
+      tile.Board.Deselect(0);
+      tile.Board.AddSelected(tile);
       tile.Select(0);
-      foreach (Tile t in Board.Explore(tile, 3, (Edge e) => !(e is Wall)))
-        t.Shade(0.6f);
+      Tile target = tile.Board.Tiles[0];
+      foreach (Tuple<ITiledBoardElement, int> t in tile.Board.GetOpacityList(tile, 1))
+        if (t.First is Tile) {
+          ((Tile)t.First).Shade(0.6f);
+          Debug.Log(t.Second);
+        }
     }
 
     // Behavior when the tile is right-clicked
@@ -32,17 +40,17 @@ namespace Board
     }
 
     // Behavior when this tile is selected
-    public void Selected(Tile tile, int flag) {
+    public override void Selected(Tile tile, int flag) {
       tile.Shade(0.5f);
     }
 
     // Behavior when this tile is deselected
-    public void Deselected(Tile tile, int flag) {
+    public override void Deselected(Tile tile, int flag) {
       tile.RemoveShade();
     }
 
     // Behavior applied to all tiles when any tile is unselected
-    public void ClearSelected(Tile tile, int flag) {
+    public override void ClearSelected(Tile tile, int flag) {
       tile.RemoveShade();
     }
 

@@ -1,21 +1,51 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 namespace Board
 {
-  public class HexBoard : Board
+  public class HexBoard : TiledBoard
   {
     [SerializeField]
     protected Tile empty;
     [SerializeField]
     protected Tile rough;
     [SerializeField]
-    protected Edge edge;
+    protected TileEdge edge;
     [SerializeField]
-    protected Edge wall;
+    protected TileEdge wall;
+
+    // Computes and returns the tile distance between the start and end board elements
+    // Edges are considered to have the row/column of whichever tile is closer to the other board element
+    // Thus, edges of the same tile have a tile distance of 0
+    public override int DistanceBetween(ITiledBoardElement start, ITiledBoardElement end) {
+      if (!(start is TileEdge || start is Tile) || !(end is TileEdge || end is Tile))
+        throw new ArgumentException("This method does not support board elements beyond edges and tiles");
+      if (start is TileEdge) {
+        Tuple<Tile, Tile> startTiles = ((TileEdge)start).Tiles;
+        return Math.Min(DistanceBetween(startTiles.First, end), DistanceBetween(startTiles.Second, end));
+      }
+      if (end is TileEdge) {
+        Tuple<Tile, Tile> endTiles = ((TileEdge)end).Tiles;
+        return Math.Min(DistanceBetween(start, endTiles.First), DistanceBetween(start, endTiles.Second));
+      }
+      Tile startTile = (Tile)start;
+      Tile endTile = (Tile)end;
+      int rowDiff = Math.Abs(startTile.Row - endTile.Row);
+      int modStartColumn = (startTile.Column * 2) + (startTile.Row % 2);
+      int modEndColumn = (endTile.Column * 2) + (endTile.Row % 2);
+      int colDiff = Math.Abs(modStartColumn - modEndColumn);
+      if (rowDiff >= colDiff) {
+        return rowDiff;
+      }
+      else {
+        return (colDiff + rowDiff) / 2;
+      }
+    }
 
     protected override void CreateBoard() {
+      Nodes = new List<BoardNode>();
       Tiles = new List<Tile>();
       Grid = new Tile[rows, columns];
       float totalLength = tileLength * (columns - 1);
@@ -33,16 +63,17 @@ namespace Board
             currentTile = Instantiate(rough, pos, Quaternion.identity);
           else
             currentTile = Instantiate(empty, pos, Quaternion.identity);
-          currentTile.Initialize(this, new RegularHexagon(), row, col);
+          currentTile.Initialize(this, BoardBehaviour, new RegularHexagon(new Point(pos.x, pos.y)), row, col);
           Grid[row, col] = currentTile;
+          Nodes.Add(currentTile);
           Tiles.Add(currentTile);
-          Edge toInstantiate;
+          TileEdge toInstantiate;
           if (myRand.Next(0, 100) > 80)
             toInstantiate = wall;
           else
             toInstantiate = edge;
           Vector2 edgePos;
-          Edge newEdge;
+          TileEdge newEdge;
           if (row > 0) {
             // Upper-left
             if (row % 2 == 1 || col > 0) {
@@ -65,6 +96,10 @@ namespace Board
           }
         }
       }
+    }
+
+    public override Tile GetTileAtPoint(Point point) {
+      throw new NotImplementedException();
     }
   }
 }

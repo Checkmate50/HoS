@@ -1,7 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 using System;
-using System.Linq;
 
 namespace Board
 {
@@ -9,7 +8,7 @@ namespace Board
   {
 
     [SerializeField]
-    protected TileBehavior tileBehavior;
+    protected BoardBehaviour BoardBehaviour;
     [SerializeField]
     protected UnitManager unitManager;
 
@@ -17,11 +16,11 @@ namespace Board
     public List<BoardNode> NodesSelected { get; protected set; }  //The BoardNode(s) most recently clicked
     public List<BoardNode> Nodes { get; protected set; }
 
-    // Use this for initialization
+    // Use this for initialization as a subclass
     void Start() {
       CreateBoard();
-      unitManager = Instantiate(unitManager);
-      unitManager.Initialize(this);
+      //unitManager = Instantiate(unitManager);
+      //unitManager.Initialize(this);
       NodesSelected = new List<BoardNode>();
     }
 
@@ -30,149 +29,186 @@ namespace Board
       for (int button = 0; button < 5; button++)
         if (Input.GetMouseButtonDown(button))
           if (NodeHovered != null)
-            tileBehavior.Clicked(NodeHovered, button);
+            BoardBehaviour.Clicked(NodeHovered, button);
     }
 
-    // Creates a board of hexagons with 'rows', 'cols' columns, and tiles 'tileLength' apart
-    // Note that tileLength also gives the vertical distance between tiles
+    // Creates a board of hexagons with 'rows', 'cols' columns, and nodes 'nodeLength' apart
+    // Note that nodeLength also gives the vertical distance between nodes
     protected abstract void CreateBoard();
 
-    public void SetTileHovered(BoardNode t) {
-      NodeHovered = t;
+    public void SetNodeHovered(BoardNode n) {
+      NodeHovered = n;
     }
 
-    public void RemoveTileHovered(BoardNode t) {
-      if (NodeHovered == t)
+    public void RemoveNodeHovered(BoardNode n) {
+      if (NodeHovered == n)
         NodeHovered = null;
     }
 
     public void Deselect(int flag) {
-      foreach (BoardNode t in NodesSelected)
-        t.Deselect(flag);
+      foreach (BoardNode n in NodesSelected)
+        n.Deselect(flag);
       NodesSelected.Clear();
-      foreach (BoardNode t in Nodes)
-        t.ClearSelected(flag);
+      foreach (BoardNode n in Nodes)
+        n.ClearSelected(flag);
     }
 
     public void AddSelected(BoardNode BoardNode) {
       NodesSelected.Add(BoardNode);
     }
 
-    public static int ComputeCost(ICollection<BoardNode> tiles) {
+    //public int ComputeCost(ICollection<BoardNode> nodes) {
+//
+  //  }
+
+    public int ComputeCost(ICollection<BoardNode> nodes, Func<BoardEdge, BoardNode, int> costMap) {
       int cost = 0;
       BoardNode prev = null;
-      foreach (BoardNode t in tiles) {
+      foreach (BoardNode n in nodes) {
         if (prev == null)
-          prev = t; //skip the cost of the start of the path (cause we start there!)
+          prev = n; //skip the cost of the start of the path (cause we start there!)
         else {
-          cost += t.Cost + prev.GetEdge(t).Cost;
-          prev = t;
+          cost += costMap(prev.GetEdge(n), n);
+          prev = n;
         }
       }
       return cost;
     }
 
-    // Given a starting BoardNode, returns all tiles that can be reached with 'distance' movement
+    // Computes and returns the distance between the start and end board elements
+    public abstract int DistanceBetween(IBoardElement start, IBoardElement end);
+
+    // Given a starting BoardNode, returns all nodes that can be reached with 'distance' movement
     // Optional Arguments
-    // 'allowable' is a function indicating whether to ignore given board elements when searching
-    // 'heuristic' is a function indicating a preference for certain board elements
-    // 
-    public static List<BoardNode> Explore(BoardNode start, int distance) {
-      return Explore(start, distance);
+    // 'costMap' is a function indicating the cost of moving through a board element (default the serializable cost of that element)
+    // 'allowable' is a function indicating whether to ignore given board elements when searching (default everything is allowed)
+    // 'heuristic' is a function indicating a preference for certain board elements (default heuristic is 0 for all elements
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance) {
+      return Explore(start, distance, (e, n) => e.Cost + n.Cost);
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<BoardNode, bool> allowable) {
-      return Explore(start, distance, (t, e, p) => allowable(t));
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, BoardNode, int> costMap) {
+      return Explore(start, distance, costMap, (n, e, p) => true);
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<Edge, bool> allowable) {
-      return Explore(start, distance, (t, e, p) => allowable(e));
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardNode, bool> allowable) {
+      return Explore(start, distance, (n, e, p) => allowable(n));
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<BoardNode, Edge, ICollection<BoardNode>, bool> allowable) {
-      return Explore(start, distance, allowable, t => 0);
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, bool> allowable) {
+      return Explore(start, distance, (n, e, p) => allowable(e));
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<IBoardElement, int> heuristic) {
-      return Search(start, l => false, (t, e, p) => ComputeCost(p) <= distance, heuristic);
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable) {
+      return Explore(start, distance, (e, n) => e.Cost + n.Cost, allowable);
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<BoardNode, bool> allowable, Func<IBoardElement, int> heuristic) {
-      return Search(start, l => false, (t, e, p) => allowable(t) && ComputeCost(p) <= distance, heuristic);
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, 
+      Func<BoardEdge, BoardNode, int> costMap, Func<BoardNode, bool> allowable) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(n) && ComputeCost(p, costMap) <= distance, n => 0);
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance, Func<Edge, bool> allowable, Func<IBoardElement, int> heuristic) {
-      return Search(start, l => false, (t, e, p) => allowable(e) && ComputeCost(p) <= distance, heuristic);
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, 
+      Func<BoardEdge, BoardNode, int> costMap, Func<BoardEdge, bool> allowable) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(e) && ComputeCost(p, costMap) <= distance, n => 0);
     }
-    public static List<BoardNode> Explore(BoardNode start, int distance,
-  Func<BoardNode, Edge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
-      return Search(start, l => false, (t, e, p) => allowable(t, e, p) && ComputeCost(p) <= distance, heuristic);
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, BoardNode, int> costMap,
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(n, e, p) && ComputeCost(p, costMap) <= distance, n => 0);
+    }
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, BoardNode, int> costMap, 
+      Func<BoardNode, bool> allowable, Func<IBoardElement, int> heuristic) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(n) && ComputeCost(p, costMap) <= distance, heuristic);
+    }
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, BoardNode, int> costMap, 
+      Func<BoardEdge, bool> allowable, Func<IBoardElement, int> heuristic) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(e) && ComputeCost(p, costMap) <= distance, heuristic);
+    }
+    public List<Tuple<BoardNode, int>> Explore(BoardNode start, int distance, Func<BoardEdge, BoardNode, int> costMap, 
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
+      return Search(start, l => false, costMap, (n, e, p) => allowable(n, e, p) && ComputeCost(p, costMap) <= distance, heuristic);
     }
 
-    // Given a BoardNode and a destination, searches for the shortest path from the start BoardNode to the destination
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination) {
-      return Search(start, destination);
+    // Given a BoardNode and a destination, returns the lowest cost path from the start BoardNode to the destination
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination) {
+      return Search(start, destination, (e, n) => e.Cost + n.Cost);
     }
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination, Func<BoardNode, bool> allowable) {
-      return Search(start, destination, (t, e, p) => allowable(t));
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, Func<BoardEdge, BoardNode, int> costMap) {
+      return Search(start, destination, costMap, (n, e, p) => true);
     }
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination, Func<Edge, bool> allowable) {
-      return Search(start, destination, (t, e, p) => allowable(e));
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, Func<BoardNode, bool> allowable) {
+      return Search(start, destination, (n, e, p) => allowable(n));
     }
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination, Func<BoardNode, Edge, ICollection<BoardNode>, bool> allowable) {
-      return Search(start, l => l.Contains(destination), allowable, t => t is BoardNode ? DistanceBetween((BoardNode)t, destination) : 0);
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, Func<BoardEdge, bool> allowable) {
+      return Search(start, destination, (n, e, p) => allowable(e));
     }
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination, Func<IBoardElement, int> heuristic) {
-      return Search(start, destination, (t, e, p) => true, heuristic);
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, 
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable) {
+      return Search(start, destination, (n, e) => n.Cost + e.Cost, allowable);
     }
-    public static List<BoardNode> Search(BoardNode start, BoardNode destination,
-      Func<BoardNode, Edge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
-      return Search(start, l => l.Contains(destination), allowable, heuristic);
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination,
+      Func<BoardEdge, BoardNode, int> costMap, Func<BoardNode, bool> allowable) {
+      return Search(start, destination, costMap, (n, e, p) => allowable(n));
+    }
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination,
+      Func<BoardEdge, BoardNode, int> costMap, Func<BoardEdge, bool> allowable) {
+      return Search(start, destination, costMap, (n, e, p) => allowable(e));
+    }
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, Func<BoardEdge, BoardNode, int> costMap,
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable) {
+      return Search(start, l => l.Contains(destination), costMap, allowable, n => n is BoardNode ? DistanceBetween((BoardNode)n, destination) : 0);
+    }
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, BoardNode destination, Func<BoardEdge, BoardNode, int> costMap,
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
+      return Search(start, l => l.Contains(destination), costMap, allowable, heuristic);
     }
 
     /*
-     * Provides a move path for all tiles from the start BoardNode until no tiles are available
-     *   OR the next BoardNode fulfills the endTile condition OR the endCondition is fulfilled
-     * The includeLast flag indicates whether or not to include the BoardNode fulfilling the endTile condition
-     * The flag indicates what sort of behavior each BoardNode will observe when explored
+     * Provides a move path for all nodes from the start BoardNode until no nodes are available
+     *   OR the next BoardNode fulfills the endNode condition OR the endCondition is fulfilled
+     * The includeLast flag indicates whether or not to include the BoardNode fulfilling the endNode condition
+     * The flag indicates what sort of Behaviour each BoardNode will observe when explored
      * The heuristic allows certain paths to be favored when exploring
      * The edgeCost indicates edges that have an additional cost
-     * Allowable indicates whether or not certain tiles should be excluded from the calculation
-     * The endTile function causes this function to immediately return when a BoardNode with the given property is found
-     * The end condition causes this function to immediately return when the found tiles fulfill the given property
+     * Allowable indicates whether or not certain nodes should be excluded from the calculation
+     * The endNode function causes this function to immediately return when a BoardNode with the given property is found
+     * The end condition causes this function to immediately return when the found nodes fulfill the given property
      */
-    public static List<BoardNode> Search(BoardNode start, Func<List<BoardNode>, bool> endCondition,
-      Func<BoardNode, Edge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
+    public List<Tuple<BoardNode, int>> Search(BoardNode start, Func<List<BoardNode>, bool> endCondition, Func<BoardEdge, BoardNode, int> costMap,
+      Func<BoardNode, BoardEdge, ICollection<BoardNode>, bool> allowable, Func<IBoardElement, int> heuristic) {
       PriorityQueue<BoardNode> queue = new PriorityQueue<BoardNode>();
       Dictionary<BoardNode, int> pathCosts = new Dictionary<BoardNode, int>();
       Dictionary<BoardNode, ICollection<BoardNode>> paths = new Dictionary<BoardNode, ICollection<BoardNode>>();
-      List<BoardNode> foundTiles = new List<BoardNode>();
-      foreach (BoardNode t in start.GetAdjacent()) {
+      List<BoardNode> foundNodes = new List<BoardNode>();
+      List<Tuple<BoardNode, int>> toReturn = new List<Tuple<BoardNode, int>>();
+      foreach (BoardEdge e in start.GetEdges()) {
+        BoardNode n = e.GetOther(start);
         List<BoardNode> newPath = new List<BoardNode>();
         newPath.Add(start);
-        newPath.Add(t);
-        if (allowable(t, start.GetEdge(t), newPath)) {
-          paths[t] = newPath;
-          pathCosts[t] = ComputeCost(paths[t]);
-          queue.Insert(t, -(pathCosts[t] + heuristic(t) + heuristic(start.GetEdge(t))), true);
+        newPath.Add(n);
+        if (allowable(n, start.GetEdge(n), newPath)) {
+          paths[n] = newPath;
+          pathCosts[n] = ComputeCost(paths[n], costMap);
+          queue.Insert(n, -(pathCosts[n] + heuristic(n) + heuristic(start.GetEdge(n))), true);
         }
       }
 
       while (queue.Count > 0) {
         BoardNode next = queue.Dequeue();
-        next.MovePath = paths[next];
-        foundTiles.Add(next);
+        foundNodes.Add(next);
+        toReturn.Add(new Tuple<BoardNode, int> (next, pathCosts[next]));
 
-        if (endCondition(foundTiles))
-          return foundTiles;
-        foreach (BoardNode t in next.GetAdjacent()) {
-          if (t == start || foundTiles.Contains(t))
+        if (endCondition(foundNodes))
+          return toReturn;
+        foreach (BoardEdge e in next.GetEdges()) {
+          BoardNode n = e.GetOther(next);
+          if (foundNodes.Contains(n))
             continue;
           List<BoardNode> newPath = new List<BoardNode>(paths[next]);
-          newPath.Add(t);
-          if (!allowable(t, next.GetEdge(t), newPath))
+          newPath.Add(n);
+          if (!allowable(n, next.GetEdge(n), newPath))
             continue;
-          int newPathCost = pathCosts[next] + next.GetEdge(t).Cost + t.Cost;
-          if (queue.Insert(t, -(newPathCost + heuristic(t) + heuristic(next.GetEdge(t))), true))
-            paths[t] = newPath;
-          pathCosts[t] = newPathCost;
+          int newPathCost = pathCosts[next] + next.GetEdge(n).Cost + n.Cost;
+          if (queue.Insert(n, -(newPathCost + heuristic(n) + heuristic(next.GetEdge(n))), true))
+            paths[n] = newPath;
+          pathCosts[n] = newPathCost;
         }
       }
-      return foundTiles;
+      return toReturn;
     }
   }
 }

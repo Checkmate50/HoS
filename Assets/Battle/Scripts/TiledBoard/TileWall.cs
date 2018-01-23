@@ -2,6 +2,6 @@
 
 namespace Board
 {
-  public class Wall : Edge
+  public class TileWall : TileEdge
   { }
 }
